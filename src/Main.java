@@ -1,5 +1,6 @@
 public class Main {
     public static void main(String[] args) {
-        System.out.println("Simple HTTP Server ...");
+        HttpServer server = new HttpServer(8888);
+        server.run();
     }
 }
