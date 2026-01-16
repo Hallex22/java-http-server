@@ -55,10 +55,13 @@ public class HttpServer {
     }
     return rawRequest.toString();
   }
-
+  
   private void handleRequest(String rawRequest) {
     // TODO: handle the user request
     System.out.println(rawRequest);
+
+
+
   }
 
 }
