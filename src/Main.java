@@ -1,4 +1,3 @@
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,10 +13,9 @@ public class Main {
     cats.add("Hera");
     cats.add("Ares");
 
-    server.addRoute("GET", "/", (req, res) -> {
-      res.setStatusCode(200);
-      res.setStatusMessage("OK");
-      res.setBody("Hello World!");
+    server.get("/", (req, res) -> {
+      res.status(200).send("Hello World!");
+      //res.setBody("Hello World!");
     });
 
     server.addRoute("GET", "/cats", (req, res) -> {

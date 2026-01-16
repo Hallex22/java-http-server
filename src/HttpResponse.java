@@ -77,4 +77,15 @@ public class HttpResponse {
     return sb.toString();
   }
 
+  public HttpResponse status(int code) {
+    this.statusCode = code;
+    this.statusMessage = HttpStatus.getMessage(code);
+    return this;
+  }
+
+  public HttpResponse send(String body) {
+    this.body = body;
+    return this;
+  }
+
 }

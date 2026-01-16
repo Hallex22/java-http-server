@@ -16,46 +16,79 @@ public class HttpServer {
     this.port = port;
   }
 
+  public void run() {
+    try {
+      ServerSocket server = new ServerSocket(port);
+      System.out.println("🚀 Server is running on port " + port + " ...");
+      while (true) {
+
+        Socket client = server.accept();
+        try {
+          String rawRequest = readAllFromClient(client);
+          HttpRequestParser parser = new HttpRequestParser();
+          HttpRequest req = parser.parseRequest(rawRequest);
+          HttpResponse res = new HttpResponse();
+
+          Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
+          if (methodRoutes != null && methodRoutes.containsKey(req.getPath())) {
+            HttpHandler handler = methodRoutes.get(req.getPath());
+            handler.handle(req, res);
+          } else {
+            res.status(404).send("Route not found");
+          }
+          PrintWriter out = new PrintWriter(client.getOutputStream());
+          out.write(res.serialize());
+          out.flush();
+        } catch (IllegalArgumentException e) {
+          HttpResponse res = new HttpResponse();
+          res.status(400).send("Bad Request");
+          PrintWriter out = new PrintWriter(client.getOutputStream());
+          out.write(res.serialize());
+          out.flush();
+        } catch (Exception e) {
+          HttpResponse res = new HttpResponse();
+          res.status(500).send("Internal Server error");
+          PrintWriter out = new PrintWriter(client.getOutputStream());
+          out.write(res.serialize());
+          out.flush();
+        } finally {
+          client.close();
+        }
+      }
+    } catch (IOException e) {
+      System.out.println("Failed to start server: " + e.getMessage());
+    }
+
+  }
+
+  // Server routing possible
   public void addRoute(String method, String path, HttpHandler handler) {
     routes.computeIfAbsent(method, k -> new HashMap<>());
     routes.get(method).put(path, handler);
   }
 
-  public void run() {
-    try {
-      ServerSocket server = new ServerSocket(port);
-      System.out.println("🚀 Server is running on port " + port);
-      while (true) {
+  public void get(String path, HttpHandler handler) {
+    addRoute("GET", path, handler);
+  }
 
-        Socket client = server.accept();
+  public void post(String path, HttpHandler handler) {
+    addRoute("POST", path, handler);
+  }
 
-        String rawRequest = readAllFromClient(client);
-        HttpRequestParser parser = new HttpRequestParser();
-        HttpRequest req = parser.parseRequest(rawRequest);
-        HttpResponse res = new HttpResponse();
+  public void put(String path, HttpHandler handler) {
+    addRoute("PUT", path, handler);
+  }
 
-        Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
-        if (methodRoutes != null && methodRoutes.containsKey(req.getPath())) {
-          HttpHandler handler = methodRoutes.get(req.getPath());
-          handler.handle(req, res);
-        } else {
-          res.setStatusCode(404);
-          res.setStatusMessage("Not Found");
-          res.setBody("Route not found");
-        }
+  public void patch(String path, HttpHandler handler) {
+    addRoute("PATCH", path, handler);
+  }
 
-        // System.out.println("Response: " + res.serialize());
-        PrintWriter out = new PrintWriter(client.getOutputStream());
-        out.write(res.serialize());
-        out.flush();
-        client.close();
-      }
-    } catch (IOException e) {
-      System.out.println("❌ Port ocuppied, try another one");
-    } catch (IllegalArgumentException e) {
-      System.out.println("Invalid request: " + e.getMessage());
-    }
+  public void delete(String path, HttpHandler handler) {
+    addRoute("DELETE", path, handler);
+  }
 
+  public void options(String path, HttpHandler handler) {
+    addRoute("OPTIONS", path, handler);
   }
 
   private String readAllFromClient(Socket client) {
