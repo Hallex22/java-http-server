@@ -5,9 +5,9 @@ public class HttpRequest {
   String version;
 
   // public HttpRequest() {
-  //   this.method = null;
-  //   this.path = null;
-  //   this.version = null;
+  // this.method = null;
+  // this.path = null;
+  // this.version = null;
   // }
 
   public HttpRequest(String method, String path, String version) {
@@ -26,6 +26,12 @@ public class HttpRequest {
 
   public String getVersion() {
     return version;
+  }
+
+  public String serialize() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(method).append(" ").append(path).append(" ").append(version);
+    return sb.toString();
   }
 
 }

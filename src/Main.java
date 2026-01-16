@@ -1,10 +1,43 @@
+import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.List;
+
 public class Main {
+
   public static void main(String[] args) {
 
-    // HttpServer server = new HttpServer(8888);
-    // server.run();
+    HttpServer server = new HttpServer(8888);
 
-    testHttpRequestParser();
+    List<String> cats = new ArrayList<>();
+    cats.add("Tigrutza");
+    cats.add("Pufu");
+    cats.add("Hera");
+    cats.add("Ares");
+
+    server.addRoute("GET", "/", (req, res) -> {
+      res.setStatusCode(200);
+      res.setStatusMessage("OK");
+      res.setBody("Hello World!");
+    });
+
+    server.addRoute("GET", "/cats", (req, res) -> {
+      res.setStatusCode(200);
+      res.setStatusMessage("OK");
+      // concatenăm lista într-un string
+      StringBuilder body = new StringBuilder("Cats: ");
+      for (String cat : cats) {
+        body.append(cat).append(", ");
+      }
+      // ștergem ultima virgulă și spațiu
+      if (!cats.isEmpty()) {
+        body.setLength(body.length() - 2);
+      }
+      res.setBody(body.toString());
+    });
+
+    server.run();
+
+    // testHttpRequestParser();
 
   }
 
@@ -14,9 +47,7 @@ public class Main {
 
     try {
       HttpRequest req = urlParser.parseRequest(rawRequest);
-      System.out.println(req.method);
-      System.out.println(req.path);
-      System.out.println(req.version);
+      System.out.println("Req: " + req.serialize());
     } catch (IllegalArgumentException e) {
       System.out.println("Invalid request: " + e.getMessage());
     }
