@@ -30,21 +30,15 @@ public class Main {
 
     server.get("/cats/:id", (req, res) -> {
       try {
-        // Extrage param-ul din path
         int id = Integer.parseInt(req.getPathParams().get("id"));
-
-        // Caută pisica în DB
-        Object cat = db.get(id); // db.get(int) returnează null dacă nu există
+        Object cat = db.get(id);
 
         if (cat != null) {
-          // Returnează ca JSON
           res.status(200).json(cat);
         } else {
-          // Pisica nu există → 404
           res.status(404).json(Map.of("message", "Cat not found"));
         }
       } catch (NumberFormatException e) {
-        // id-ul nu era un număr valid
         res.status(400).json(Map.of("message", "Invalid cat ID"));
       }
     });

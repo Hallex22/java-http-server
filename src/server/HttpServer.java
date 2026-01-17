@@ -8,10 +8,37 @@ import java.util.Map;
 public class HttpServer {
 
   private int port;
+  private boolean debug = true;
+
   private Map<String, Map<String, HttpHandler>> routes = new HashMap<>();
 
   public HttpServer(int port) {
     this.port = port;
+  }
+
+  public HttpServer(int port, boolean debug) {
+    this.port = port;
+    this.debug = debug;
+  }
+
+  public void setDebug(boolean debug) {
+    this.debug = debug;
+  }
+
+  private void logRequest(HttpRequest req) {
+    if (!debug)
+      return;
+    System.out.println("\n[DEBUG] Incoming Request");
+    System.out.println(req.serialize());
+  }
+
+  private void logResponse(HttpRequest req, HttpResponse res, long durationMs) {
+    if (!debug)
+      return;
+    System.out.println("\n[DEBUG] Response");
+    System.out.println(req.getMethod() + " " + req.getPath() + " -> " + res.getStatusCode()
+        + " (" + durationMs + "ms)");
+    System.out.println(res.serialize());
   }
 
   public void run() {
@@ -25,16 +52,10 @@ public class HttpServer {
           HttpRequestParser parser = new HttpRequestParser(client);
           HttpRequest req = parser.parseRequest();
 
-          System.out.println("[SERVER DEBUG]");
-          System.out.println(req.serialize());
-
           HttpResponse res = new HttpResponse();
-
           Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
-
           HttpHandler handler = null;
           Map<String, String> pathParams = null;
-
           if (methodRoutes != null) {
             for (String routePath : methodRoutes.keySet()) {
               // Compară ruta definită cu path-ul curat al request-ului
@@ -48,7 +69,11 @@ public class HttpServer {
           }
           if (handler != null) {
             req.setPathParams(pathParams);
+            long start = System.currentTimeMillis();
+            logRequest(req);
             handler.handle(req, res);
+            long duration = System.currentTimeMillis() - start;
+            logResponse(req, res, duration);
           } else {
             res.status(404).json(Map.of("message", "Route not found"));
           }

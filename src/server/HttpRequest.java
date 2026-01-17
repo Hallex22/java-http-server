@@ -51,6 +51,10 @@ public class HttpRequest {
     this.version = version;
   }
 
+  public Map<String, String> getHeaders() {
+    return headers;
+  }
+
   public void setHeaders(Map<String, String> headers) {
     this.headers = headers;
   }
