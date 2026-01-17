@@ -1,6 +1,7 @@
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import com.google.gson.Gson;
 
 public class HttpResponse {
 
@@ -84,6 +85,14 @@ public class HttpResponse {
   }
 
   public HttpResponse send(String body) {
+    this.body = body;
+    return this;
+  }
+
+  public HttpResponse json(Object data) {
+    this.addHeader("Content-Type", "application/json; charset=UTF-8");
+    Gson gson = new Gson();
+    String body = gson.toJson(data);
     this.body = body;
     return this;
   }

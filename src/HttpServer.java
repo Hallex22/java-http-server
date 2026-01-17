@@ -34,7 +34,7 @@ public class HttpServer {
             HttpHandler handler = methodRoutes.get(req.getPath());
             handler.handle(req, res);
           } else {
-            res.status(404).send("Route not found");
+            res.status(404).json(Map.of("message", "Route not found"));
           }
           PrintWriter out = new PrintWriter(client.getOutputStream());
           out.write(res.serialize());

@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class Main {
 
@@ -14,13 +15,10 @@ public class Main {
     cats.add("Ares");
 
     server.get("/", (req, res) -> {
-      res.status(200).send("Hello World!");
-      //res.setBody("Hello World!");
+      res.status(200).json(Map.of("message", "Hello World!"));
     });
 
-    server.addRoute("GET", "/cats", (req, res) -> {
-      res.setStatusCode(200);
-      res.setStatusMessage("OK");
+    server.get("/cats", (req, res) -> {
       // concatenăm lista într-un string
       StringBuilder body = new StringBuilder("Cats: ");
       for (String cat : cats) {
@@ -30,7 +28,10 @@ public class Main {
       if (!cats.isEmpty()) {
         body.setLength(body.length() - 2);
       }
-      res.setBody(body.toString());
+      // res.status(200).send(body.toString());
+      res.status(200).json(Map.of(
+          "success", true,
+          "data", body.toString()));
     });
 
     server.run();
