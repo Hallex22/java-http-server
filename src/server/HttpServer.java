@@ -1,6 +1,4 @@
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -31,9 +29,25 @@ public class HttpServer {
           System.out.println(req.serialize());
 
           HttpResponse res = new HttpResponse();
+
           Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
-          if (methodRoutes != null && methodRoutes.containsKey(req.getPath())) {
-            HttpHandler handler = methodRoutes.get(req.getPath());
+
+          HttpHandler handler = null;
+          Map<String, String> pathParams = null;
+
+          if (methodRoutes != null) {
+            for (String routePath : methodRoutes.keySet()) {
+              // Compară ruta definită cu path-ul curat al request-ului
+              Map<String, String> params = matchPathWithParams(routePath, req.getCleanPath());
+              if (params != null) {
+                handler = methodRoutes.get(routePath);
+                pathParams = params;
+                break;
+              }
+            }
+          }
+          if (handler != null) {
+            req.setPathParams(pathParams);
             handler.handle(req, res);
           } else {
             res.status(404).json(Map.of("message", "Route not found"));
@@ -69,6 +83,24 @@ public class HttpServer {
     routes.get(method).put(path, handler);
   }
 
+  private Map<String, String> matchPathWithParams(String routePath, String requestPath) {
+    String[] routeParts = routePath.split("/");
+    String[] reqParts = requestPath.split("/");
+
+    if (routeParts.length != reqParts.length)
+      return null;
+
+    Map<String, String> params = new HashMap<>();
+    for (int i = 0; i < routeParts.length; i++) {
+      if (routeParts[i].startsWith(":")) {
+        params.put(routeParts[i].substring(1), reqParts[i]);
+      } else if (!routeParts[i].equals(reqParts[i])) {
+        return null;
+      }
+    }
+    return params;
+  }
+
   public void get(String path, HttpHandler handler) {
     addRoute("GET", path, handler);
   }
@@ -92,22 +124,5 @@ public class HttpServer {
   public void options(String path, HttpHandler handler) {
     addRoute("OPTIONS", path, handler);
   }
-
-  // private String readAllFromClient(Socket client) {
-  //   StringBuilder rawRequest = new StringBuilder();
-  //   try {
-  //     BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()));
-  //     String line;
-  //     while ((line = br.readLine()) != null) {
-  //       if (line.isEmpty()) {
-  //         break;
-  //       }
-  //       rawRequest.append(line).append("\r\n");
-  //     }
-  //   } catch (IOException e) {
-  //     // TODO: handle exception
-  //   }
-  //   return rawRequest.toString();
-  // }
 
 }

@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -20,7 +21,6 @@ public class HttpRequestParser {
   public HttpRequestParser(Socket client) throws IOException {
     this.client = client;
     this.inputStream = client.getInputStream();
-    this.in = new BufferedReader(new InputStreamReader(inputStream));
   }
 
   public HttpRequest parseRequest() throws IllegalArgumentException, IOException {
@@ -50,10 +50,10 @@ public class HttpRequestParser {
 
   // Reads request method, path and version + validation
   private String[] readRequestLine() throws IOException, IllegalArgumentException {
-    String line = in.readLine();
+    String line = readLine(inputStream);
 
     if (line == null || line.isEmpty()) {
-      throw new IllegalArgumentException("Empty request line!");
+      throw new IllegalArgumentException("Empty request");
     }
 
     String[] parts = line.split(" ");
@@ -72,35 +72,58 @@ public class HttpRequestParser {
 
   private Map<String, String> readHeaders() throws IOException {
     Map<String, String> headers = new HashMap<>();
-    String line;
-    while ((line = in.readLine()) != null) {
+    while (true) {
+      String line = readLine(inputStream);
       if (line.isEmpty()) {
         break;
       }
-      String[] parts = line.split(":", 2);
-      if (parts.length == 2) {
-        headers.put(parts[0].trim(), parts[1].trim());
-      } else {
-        throw new IllegalArgumentException("Invalid header: " + line);
+      int colonIndex = line.indexOf(":");
+      if (colonIndex == -1) {
+        continue;
       }
+      String name = line.substring(0, colonIndex).trim();
+      String value = line.substring(colonIndex + 1).trim();
+      headers.put(name, value);
     }
     return headers;
   }
 
   private String readBody(int contentLength) throws IOException {
-    char[] bodyChars = new char[contentLength];
+    byte[] bodyByte = new byte[contentLength];
     int totalRead = 0;
 
     while (totalRead < contentLength) {
-      int bytesRead = in.read(bodyChars, totalRead, contentLength - totalRead);
-      if (bytesRead == -1) {
+      int read = inputStream.read(bodyByte, totalRead, contentLength - totalRead);
+      if (read == -1) {
         // clientul a închis conexiunea prea devreme
         throw new IOException("Unexpected end of stream while reading body");
       }
-      totalRead += bytesRead;
+      totalRead += read;
     }
 
-    return new String(bodyChars);
+    return new String(bodyByte);
+  }
+
+  private String readLine(InputStream in) throws IOException {
+    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    int current;
+    boolean seenCR = false;
+    while ((current = in.read()) != -1) {
+      if (seenCR && current == '\n') {
+        break;
+      }
+
+      if (current == '\r') {
+        seenCR = true;
+      } else {
+        if (seenCR) {
+          buffer.write('\r');
+          seenCR = false;
+        }
+        buffer.write(current);
+      }
+    }
+    return buffer.toString(StandardCharsets.UTF_8);
   }
 
 }
