@@ -24,11 +24,13 @@ public class HttpServer {
 
         Socket client = server.accept();
         try {
-          String rawRequest = readAllFromClient(client);
-          HttpRequestParser parser = new HttpRequestParser();
-          HttpRequest req = parser.parseRequest(rawRequest);
-          HttpResponse res = new HttpResponse();
+          HttpRequestParser parser = new HttpRequestParser(client);
+          HttpRequest req = parser.parseRequest();
 
+          System.out.println("[SERVER DEBUG]");
+          System.out.println(req.serialize());
+
+          HttpResponse res = new HttpResponse();
           Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
           if (methodRoutes != null && methodRoutes.containsKey(req.getPath())) {
             HttpHandler handler = methodRoutes.get(req.getPath());
@@ -41,13 +43,13 @@ public class HttpServer {
           out.flush();
         } catch (IllegalArgumentException e) {
           HttpResponse res = new HttpResponse();
-          res.status(400).send("Bad Request");
+          res.status(400).json(Map.of("message", "Bad Request"));
           PrintWriter out = new PrintWriter(client.getOutputStream());
           out.write(res.serialize());
           out.flush();
         } catch (Exception e) {
           HttpResponse res = new HttpResponse();
-          res.status(500).send("Internal Server error");
+          res.status(500).json(Map.of("message", "Internal Server error"));
           PrintWriter out = new PrintWriter(client.getOutputStream());
           out.write(res.serialize());
           out.flush();
@@ -91,21 +93,21 @@ public class HttpServer {
     addRoute("OPTIONS", path, handler);
   }
 
-  private String readAllFromClient(Socket client) {
-    StringBuilder rawRequest = new StringBuilder();
-    try {
-      BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()));
-      String line;
-      while ((line = br.readLine()) != null) {
-        if (line.isEmpty()) {
-          break;
-        }
-        rawRequest.append(line).append("\r\n");
-      }
-    } catch (IOException e) {
-      // TODO: handle exception
-    }
-    return rawRequest.toString();
-  }
+  // private String readAllFromClient(Socket client) {
+  //   StringBuilder rawRequest = new StringBuilder();
+  //   try {
+  //     BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()));
+  //     String line;
+  //     while ((line = br.readLine()) != null) {
+  //       if (line.isEmpty()) {
+  //         break;
+  //       }
+  //       rawRequest.append(line).append("\r\n");
+  //     }
+  //   } catch (IOException e) {
+  //     // TODO: handle exception
+  //   }
+  //   return rawRequest.toString();
+  // }
 
 }
