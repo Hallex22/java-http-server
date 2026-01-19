@@ -1,4 +1,5 @@
-import java.io.BufferedReader;
+package server;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,7 +11,7 @@ import java.util.Set;
 
 public class HttpRequestParser {
 
-  private Socket client;
+  private Socket client; 
   private InputStream inputStream;
 
   static final Set<String> VALID_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");

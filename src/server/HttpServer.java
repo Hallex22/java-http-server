@@ -1,16 +1,19 @@
+package server;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class HttpServer {
 
   private int port;
   private boolean debug = true;
-
-  private Map<String, Map<String, HttpHandler>> routes = new HashMap<>();
+  private Map<String, List<Route>> routes = new HashMap<>();
 
   public HttpServer(int port) {
     this.port = port;
@@ -42,70 +45,102 @@ public class HttpServer {
   }
 
   public void run() {
-    try {
-      ServerSocket server = new ServerSocket(port);
-      System.out.println("🚀 Server is running on port " + port + " ...");
-      while (true) {
+    try (ServerSocket server = new ServerSocket(port)) {
 
+      System.out.println("🚀 Server is running on port " + port + " ...");
+
+      while (true) {
         Socket client = server.accept();
+
         try {
+          long startTime = System.currentTimeMillis();
+
           HttpRequestParser parser = new HttpRequestParser(client);
           HttpRequest req = parser.parseRequest();
-
           HttpResponse res = new HttpResponse();
-          Map<String, HttpHandler> methodRoutes = routes.get(req.getMethod());
-          HttpHandler handler = null;
+
+          logRequest(req);
+
+          Route matchedRoute = null;
           Map<String, String> pathParams = null;
+
+          List<Route> methodRoutes = routes.get(req.getMethod());
+
           if (methodRoutes != null) {
-            for (String routePath : methodRoutes.keySet()) {
-              // Compară ruta definită cu path-ul curat al request-ului
-              Map<String, String> params = matchPathWithParams(routePath, req.getCleanPath());
+            for (Route route : methodRoutes) {
+              Map<String, String> params = matchPathWithParams(route.path, req.getCleanPath());
+
               if (params != null) {
-                handler = methodRoutes.get(routePath);
+                matchedRoute = route;
                 pathParams = params;
                 break;
               }
             }
           }
-          if (handler != null) {
+
+          if (matchedRoute != null) {
             req.setPathParams(pathParams);
-            long start = System.currentTimeMillis();
-            logRequest(req);
-            handler.handle(req, res);
-            long duration = System.currentTimeMillis() - start;
-            logResponse(req, res, duration);
+
+            MiddlewareExecutor.execute(
+                matchedRoute.middlewares,
+                matchedRoute.handler,
+                req,
+                res);
           } else {
             res.status(404).json(Map.of("message", "Route not found"));
           }
+
+          long duration = System.currentTimeMillis() - startTime;
+          logResponse(req, res, duration);
+
           PrintWriter out = new PrintWriter(client.getOutputStream());
           out.write(res.serialize());
           out.flush();
+
         } catch (IllegalArgumentException e) {
-          HttpResponse res = new HttpResponse();
-          res.status(400).json(Map.of("message", "Bad Request"));
-          PrintWriter out = new PrintWriter(client.getOutputStream());
-          out.write(res.serialize());
-          out.flush();
+          sendError(client, 400, "Bad Request");
         } catch (Exception e) {
-          HttpResponse res = new HttpResponse();
-          res.status(500).json(Map.of("message", "Internal Server error"));
-          PrintWriter out = new PrintWriter(client.getOutputStream());
-          out.write(res.serialize());
-          out.flush();
+          sendError(client, 500, "Internal Server Error");
         } finally {
           client.close();
         }
       }
+
     } catch (IOException e) {
       System.out.println("Failed to start server: " + e.getMessage());
     }
+  }
 
+  private void sendError(Socket client, int status, String message) {
+    try {
+      HttpResponse res = new HttpResponse();
+      res.status(status).json(Map.of("message", message));
+      PrintWriter out = new PrintWriter(client.getOutputStream());
+      out.write(res.serialize());
+      out.flush();
+    } catch (IOException ignored) {
+    }
   }
 
   // Server routing possible
-  public void addRoute(String method, String path, HttpHandler handler) {
-    routes.computeIfAbsent(method, k -> new HashMap<>());
-    routes.get(method).put(path, handler);
+  private void addRoute(String method, String path, Object... handlers) {
+
+    List<Middleware> middlewares = new ArrayList<>();
+    for (int i = 0; i < handlers.length - 1; i++) {
+      if (!(handlers[i] instanceof Middleware)) {
+        throw new IllegalArgumentException("All handlers except last must be Middleware");
+      }
+      middlewares.add((Middleware) handlers[i]);
+    }
+
+    Object last = handlers[handlers.length - 1];
+    if (!(last instanceof HttpHandler)) {
+      throw new IllegalArgumentException("Last argument must be HttpHandler");
+    }
+    HttpHandler handler = (HttpHandler) last;
+
+    Route route = new Route(method, path, middlewares, handler);
+    routes.computeIfAbsent(method, k -> new ArrayList<>()).add(route);
   }
 
   private Map<String, String> matchPathWithParams(String routePath, String requestPath) {
@@ -126,24 +161,54 @@ public class HttpServer {
     return params;
   }
 
+  // GET
+  public void get(String path, Object... handlers) {
+    addRoute("GET", path, handlers);
+  }
+
   public void get(String path, HttpHandler handler) {
     addRoute("GET", path, handler);
+  }
+
+  // POST
+  public void post(String path, Object... handlers) {
+    addRoute("POST", path, handlers);
   }
 
   public void post(String path, HttpHandler handler) {
     addRoute("POST", path, handler);
   }
 
+  // PUT
+  public void put(String path, Object... handlers) {
+    addRoute("PUT", path, handlers);
+  }
+
   public void put(String path, HttpHandler handler) {
     addRoute("PUT", path, handler);
+  }
+
+  // PATCH
+  public void patch(String path, Object... handlers) {
+    addRoute("PATCH", path, handlers);
   }
 
   public void patch(String path, HttpHandler handler) {
     addRoute("PATCH", path, handler);
   }
 
+  // DELETE
+  public void delete(String path, Object... handlers) {
+    addRoute("DELETE", path, handlers);
+  }
+
   public void delete(String path, HttpHandler handler) {
     addRoute("DELETE", path, handler);
+  }
+
+  // OPTIONS
+  public void options(String path, Object... handlers) {
+    addRoute("OPTIONS", path, handlers);
   }
 
   public void options(String path, HttpHandler handler) {

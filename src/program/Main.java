@@ -1,4 +1,9 @@
+package program;
+
 import java.util.Map;
+
+import server.HttpHandler;
+import server.HttpServer;
 
 import fakeDB.CatsDB;
 
@@ -14,7 +19,9 @@ public class Main {
       res.status(200).json(Map.of("message", "Hello World!"));
     });
 
-    server.get("/cats", (req, res) -> res.status(200).json(Map.of("data", db.getAll())));
+    server.get("/cats", UserMiddleware.tokenAuth(), (HttpHandler) (req, res) -> {
+      res.status(200).json(Map.of("data", db.getAll()));
+    });
 
     server.post("/cats", (req, res) -> {
       Map<String, Object> body = req.getBodyJson();
@@ -32,7 +39,6 @@ public class Main {
       try {
         int id = Integer.parseInt(req.getPathParams().get("id"));
         Object cat = db.get(id);
-
         if (cat != null) {
           res.status(200).json(cat);
         } else {
