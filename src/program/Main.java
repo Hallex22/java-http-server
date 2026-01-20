@@ -11,13 +11,16 @@ public class Main {
 
   public static void main(String[] args) {
 
-    HttpServer server = new HttpServer(8888);
+    HttpServer server = new HttpServer(8888, true);
     CatsDB db = new CatsDB("fakeDB/cats.json");
 
+    server.use(UserMiddleware.tokenAuth());
+    
     // Routes
     server.get("/", (req, res) -> {
       res.status(200).json(Map.of("message", "Hello World!"));
     });
+
 
     server.get("/cats", UserMiddleware.tokenAuth(), (HttpHandler) (req, res) -> {
       res.status(200).json(Map.of("data", db.getAll()));

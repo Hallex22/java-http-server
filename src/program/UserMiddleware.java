@@ -6,7 +6,6 @@ import server.Middleware;
 
 public class UserMiddleware {
 
-
   public static Middleware tokenAuth() {
     return (req, res, next) -> {
       String token = req.getHeaders().get("Authorization");
@@ -17,6 +16,5 @@ public class UserMiddleware {
       }
     };
   }
-
 
 }

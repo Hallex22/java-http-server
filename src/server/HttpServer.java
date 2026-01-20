@@ -14,6 +14,17 @@ public class HttpServer {
   private int port;
   private boolean debug = true;
   private Map<String, List<Route>> routes = new HashMap<>();
+  private List<GlobalMiddleware> globalMiddlewares = new ArrayList<>();
+
+  private static class GlobalMiddleware {
+    String pathPrefix;
+    Middleware handler;
+
+    GlobalMiddleware(String pathPrefix, Middleware handler) {
+      this.pathPrefix = pathPrefix;
+      this.handler = handler;
+    }
+  }
 
   public HttpServer(int port) {
     this.port = port;
@@ -55,21 +66,21 @@ public class HttpServer {
         try {
           long startTime = System.currentTimeMillis();
 
+          // parse request
           HttpRequestParser parser = new HttpRequestParser(client);
           HttpRequest req = parser.parseRequest();
           HttpResponse res = new HttpResponse();
 
           logRequest(req);
 
+          // găsește ruta
           Route matchedRoute = null;
           Map<String, String> pathParams = null;
-
           List<Route> methodRoutes = routes.get(req.getMethod());
 
           if (methodRoutes != null) {
             for (Route route : methodRoutes) {
               Map<String, String> params = matchPathWithParams(route.path, req.getCleanPath());
-
               if (params != null) {
                 matchedRoute = route;
                 pathParams = params;
@@ -81,11 +92,16 @@ public class HttpServer {
           if (matchedRoute != null) {
             req.setPathParams(pathParams);
 
-            MiddlewareExecutor.execute(
-                matchedRoute.middlewares,
-                matchedRoute.handler,
-                req,
-                res);
+            // combină middleware-urile globale cu cele ale rutei
+            List<Middleware> effectiveMiddlewares = new ArrayList<>();
+            for (GlobalMiddleware gm : globalMiddlewares) {
+              if(gm.pathPrefix == null || req.getCleanPath().startsWith(gm.pathPrefix)) {
+                effectiveMiddlewares.add(gm.handler);
+              }
+            }
+            effectiveMiddlewares.addAll(matchedRoute.middlewares);
+            MiddlewareExecutor.execute(effectiveMiddlewares, matchedRoute.handler, req, res);
+
           } else {
             res.status(404).json(Map.of("message", "Route not found"));
           }
@@ -141,6 +157,14 @@ public class HttpServer {
 
     Route route = new Route(method, path, middlewares, handler);
     routes.computeIfAbsent(method, k -> new ArrayList<>()).add(route);
+  }
+
+  public void use(Middleware handler) {
+    globalMiddlewares.add(new GlobalMiddleware(null, handler));
+  }
+
+  public void use(String pathPrefix, Middleware handler) {
+    globalMiddlewares.add(new GlobalMiddleware(pathPrefix, handler));
   }
 
   private Map<String, String> matchPathWithParams(String routePath, String requestPath) {
