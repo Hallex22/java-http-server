@@ -11,7 +11,7 @@ public class Main {
 
   public static void main(String[] args) {
 
-    HttpServer server = new HttpServer(8888, true);
+    HttpServer server = new HttpServer(false);
     CatsDB db = new CatsDB("fakeDB/cats.json");
 
     server.use(UserMiddleware.test());
@@ -27,8 +27,6 @@ public class Main {
     catsRouter.get("/", UserMiddleware.tokenAuth(), (HttpHandler) (req, res) -> {
       res.status(200).json(Map.of("data", db.getAll()));
     });
-
-    server.use("/cats", catsRouter);
 
     catsRouter.post("/", (req, res) -> {
       Map<String, Object> body = req.getBodyJson();
@@ -56,24 +54,14 @@ public class Main {
       }
     });
 
-    server.printRouteTree();
+    server.use("/cats", catsRouter);
 
-    server.run();
-
-    // testHttpRequestParser();
+    server.listen(8888, "localhost", () -> {
+      System.out.println("🚀 Server running on http://" + server.host + ":" +
+          server.port + " ...");
+      server.printRouteTree();
+    });
 
   }
-
-  // public static void testHttpRequestParser() {
-  // HttpRequestParser urlParser = new HttpRequestParser();
-  // String rawRequest = "GETT / HTTP/1.1\r\n";
-
-  // try {
-  // HttpRequest req = urlParser.parseRequest(rawRequest);
-  // System.out.println("Req: " + req.serialize());
-  // } catch (IllegalArgumentException e) {
-  // System.out.println("Invalid request: " + e.getMessage());
-  // }
-  // }
 
 }

@@ -4,29 +4,141 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class HttpServer extends Router {
 
-  private int port;
-  private boolean debug = true;
+  public int port = 8080;
+  public String host;
 
-  public HttpServer(int port) {
-    this.port = port;
+  private volatile boolean isRunning = true;
+  private ServerSocket serverSocket = null;
+  private final ExecutorService threadPool = Executors.newFixedThreadPool(10);
+  private boolean debug = false;
+
+  public HttpServer(boolean debug) {
+    this.debug = debug;
   }
 
-  public HttpServer(int port, boolean debug) {
-    this.port = port;
-    this.debug = debug;
+  public HttpServer() {
   }
 
   public void setDebug(boolean debug) {
     this.debug = debug;
   }
+
+  // ---------------------------------------------------------
+  // Public Methods
+  public void listen(int port, String host, Runnable callback) {
+    this.host = host;
+    this.port = port;
+    new Thread(() -> {
+      this.run();
+    }).start();
+
+    // startConsoleListener
+    new Thread(() -> {
+      Scanner console = new Scanner(System.in);
+      while (this.isRunning == true) {
+        String command = console.nextLine();
+        if (command.equals("stop") || command.equals("exit")) {
+          System.out.println("Do you want to stop the server? y/n");
+          String confirmation = console.nextLine();
+          if (confirmation.equals("y")) {
+            this.stop();
+          } else {
+            System.out.println("Server continues to run ...");
+          }
+        }
+      }
+    }).start();
+
+    if (callback != null) {
+      callback.run();
+    }
+  };
+
+  public void listen() {
+    this.listen(8080, "localhost", null);
+  }
+
+  public void listen(Runnable callback) {
+    this.listen(8080, "localhost", callback);
+  }
+
+  public void listen(int port) {
+    this.listen(port, "localhost", null);
+  }
+
+  public void listen(int port, Runnable callback) {
+    this.listen(port, "localhost", callback);
+  }
+
+  public synchronized void stop() {
+    if (!this.isRunning && serverSocket != null && serverSocket.isClosed()) {
+      return;
+    }
+    try {
+      this.isRunning = false;
+      if (serverSocket != null && !serverSocket.isClosed()) {
+        serverSocket.close();
+      }
+      threadPool.shutdown();
+      if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+        threadPool.shutdownNow();
+      }
+      System.out.println("✅ Resources cleared and server stopped.");
+    } catch (IOException e) {
+      System.err.println("Error while stopping server: " + e.getMessage());
+    } catch (InterruptedException e) {
+      System.err.println("Error while stopping the threadPool: " + e.getMessage());
+    }
+  }
+
+  public void printRouteTree() {
+    System.out.println("\n===== HTTP ROUTE TREE =====");
+    if (routes.isEmpty()) {
+      System.out.println("No routes registered.");
+      return;
+    }
+
+    // Grupăm rutele după path pentru a le afișa frumos
+    Map<String, List<String>> tree = new HashMap<>();
+
+    routes.forEach((method, routeList) -> {
+      for (Route r : routeList) {
+        tree.computeIfAbsent(r.path, k -> new ArrayList<>()).add(method);
+      }
+    });
+
+    // Sortăm path-urile alfabetic pentru o listă ordonată
+    List<String> sortedPaths = new ArrayList<>(tree.keySet());
+    Collections.sort(sortedPaths);
+
+    for (String path : sortedPaths) {
+      List<String> methods = tree.get(path);
+      // Afișăm path-ul și metodele suportate (ex: /cats [GET, POST])
+      System.out.printf(" %-20s %s\n", path, methods.toString());
+
+      // Dacă vrei să vezi și câte middleware-uri are fiecare
+      for (Route r : getRoutesForPath(path)) {
+        System.out.println("    └── " + r.method + ": " + r.middlewares.size() + " middlewares");
+      }
+    }
+    System.out.println("===========================\n");
+  }
+
+  // -------------------------------------------------------
+  // Private methods
 
   private void logRequest(HttpRequest req) {
     if (!debug)
@@ -60,16 +172,28 @@ public class HttpServer extends Router {
     return null;
   }
 
-  public void run() {
-    try (ServerSocket serverSocket = new ServerSocket(port)) {
-      System.out.println("🚀 Server is running on port " + port + " ...");
-      while (true) {
-        Socket client = serverSocket.accept();
-        // TODO Multhi-Threading
-        handleClient(client);
+  private void run() {
+    try {
+      this.serverSocket = new ServerSocket(port);
+      while (this.isRunning) {
+        try {
+          Socket client = serverSocket.accept();
+          threadPool.execute(() -> handleClient(client));
+        } catch (SocketException e) {
+          if (!isRunning) {
+            System.out.println("🛑 Server socket closed for shutdown.");
+            break;
+          } else {
+            throw e;
+          }
+        }
       }
     } catch (IOException e) {
-      System.out.println("Failed to start server: " + e.getMessage());
+      if (isRunning) {
+        System.err.println("❌ Server error: " + e.getMessage());
+      }
+    } finally {
+      this.stop();
     }
   }
 
@@ -81,6 +205,9 @@ public class HttpServer extends Router {
       HttpRequest req = parser.parseRequest();
       HttpResponse res = new HttpResponse();
 
+      if (debug) {
+        System.out.println("[THREAD] Cerere procesata de: " + Thread.currentThread().getName());
+      }
       logRequest(req);
 
       Route matchedRoute = findRoute(req);
@@ -125,39 +252,6 @@ public class HttpServer extends Router {
       out.flush();
     } catch (IOException ignored) {
     }
-  }
-
-  public void printRouteTree() {
-    System.out.println("\n===== HTTP ROUTE TREE =====");
-    if (routes.isEmpty()) {
-      System.out.println("No routes registered.");
-      return;
-    }
-
-    // Grupăm rutele după path pentru a le afișa frumos
-    Map<String, List<String>> tree = new HashMap<>();
-
-    routes.forEach((method, routeList) -> {
-      for (Route r : routeList) {
-        tree.computeIfAbsent(r.path, k -> new ArrayList<>()).add(method);
-      }
-    });
-
-    // Sortăm path-urile alfabetic pentru o listă ordonată
-    List<String> sortedPaths = new ArrayList<>(tree.keySet());
-    Collections.sort(sortedPaths);
-
-    for (String path : sortedPaths) {
-      List<String> methods = tree.get(path);
-      // Afișăm path-ul și metodele suportate (ex: /cats [GET, POST])
-      System.out.printf(" %-20s %s\n", path, methods.toString());
-
-      // Dacă vrei să vezi și câte middleware-uri are fiecare
-      for (Route r : getRoutesForPath(path)) {
-        System.out.println("    └── " + r.method + ": " + r.middlewares.size() + " middlewares");
-      }
-    }
-    System.out.println("===========================\n");
   }
 
   // Helper pentru a lua toate obiectele Route pentru un anumit path
