@@ -1,10 +1,13 @@
 package server;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -210,29 +213,51 @@ public class HttpServer extends Router {
       }
       logRequest(req);
 
-      Route matchedRoute = findRoute(req);
-      if (matchedRoute != null) {
-        List<Middleware> effectiveMiddlewares = new ArrayList<>();
-        for (GlobalMiddleware gm : this.middlewares) {
-          if (gm.pathPrefix == null || req.getCleanPath().startsWith(gm.pathPrefix)) {
-            effectiveMiddlewares.add(gm.handler);
+      // Static Files
+      String path = req.getPath();
+      boolean fileFound = false;
+      for (String prefix : staticRoutes.keySet()) {
+        if (path.startsWith(prefix)) {
+          String folderPath = staticRoutes.get(prefix);
+          String fileName = path.substring(prefix.length());
+          File file = new File(folderPath + fileName);
+
+          if (file.isDirectory()) {
+            file = new File(file, "index.html");
+          }
+
+          if (file.exists() && !file.isDirectory()) {
+            serveStaticFile(res, client, file);
+            fileFound = true;
+            break;
           }
         }
-        effectiveMiddlewares.addAll(matchedRoute.middlewares);
-
-        MiddlewareExecutor.execute(effectiveMiddlewares, matchedRoute.handler, req, res);
-
-      } else {
-        res.status(404).json(Map.of("message", "Route not found"));
       }
 
+      // Dinamyc route
+      if (!fileFound) {
+        Route matchedRoute = findRoute(req);
+        if (matchedRoute != null) {
+          List<Middleware> effectiveMiddlewares = new ArrayList<>();
+          for (GlobalMiddleware gm : this.middlewares) {
+            if (gm.pathPrefix == null || req.getCleanPath().startsWith(gm.pathPrefix)) {
+              effectiveMiddlewares.add(gm.handler);
+            }
+          }
+          effectiveMiddlewares.addAll(matchedRoute.middlewares);
+
+          MiddlewareExecutor.execute(effectiveMiddlewares, matchedRoute.handler, req, res);
+
+        } else {
+          res.status(404).json(Map.of("message", "Route not found"));
+        }
+
+        PrintWriter out = new PrintWriter(client.getOutputStream());
+        out.write(res.serialize());
+        out.flush();
+      }
       long duration = System.currentTimeMillis() - startTime;
       logResponse(req, res, duration);
-
-      PrintWriter out = new PrintWriter(client.getOutputStream());
-      out.write(res.serialize());
-      out.flush();
-
     } catch (Exception e) {
       sendError(client, 500, "Internal Server Error");
     } finally {
@@ -264,6 +289,31 @@ public class HttpServer extends Router {
       }
     });
     return found;
+  }
+
+  private void serveStaticFile(HttpResponse res, Socket client, File file) {
+    try {
+      OutputStream out = client.getOutputStream();
+      PrintWriter writer = new PrintWriter(out, false);
+
+      byte[] bodyBytes = Files.readAllBytes(file.toPath());
+      String contentType = Files.probeContentType(file.toPath());
+      if (contentType == null) {
+        contentType = "application/octet-stream";
+      }
+      writer.println("HTTP/1.1 200 OK");
+      writer.println("Content-Type: " + contentType);
+      writer.println("Content-Length: " + bodyBytes.length);
+      writer.println();
+      writer.flush();
+      out.write(bodyBytes);
+      out.flush();
+
+      res.status(200).setBody("[Static File: " + file.getName() + "]");
+
+    } catch (IOException e) {
+      // TODO Handle serverStaticFile IOException
+    }
   }
 
 }

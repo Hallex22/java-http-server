@@ -11,7 +11,7 @@ public class Main {
 
   public static void main(String[] args) {
 
-    HttpServer server = new HttpServer(false);
+    HttpServer server = new HttpServer(true);
     CatsDB db = new CatsDB("fakeDB/cats.json");
 
     server.use(UserMiddleware.test());
@@ -55,6 +55,11 @@ public class Main {
     });
 
     server.use("/cats", catsRouter);
+
+
+    // Static files (frontend server)
+    server.staticFiles("/public", "public");
+
 
     server.listen(8888, "localhost", () -> {
       System.out.println("🚀 Server running on http://" + server.host + ":" +
