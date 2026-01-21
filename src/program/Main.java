@@ -4,7 +4,7 @@ import java.util.Map;
 
 import server.HttpHandler;
 import server.HttpServer;
-
+import server.Router;
 import fakeDB.CatsDB;
 
 public class Main {
@@ -14,19 +14,23 @@ public class Main {
     HttpServer server = new HttpServer(8888, true);
     CatsDB db = new CatsDB("fakeDB/cats.json");
 
-    server.use(UserMiddleware.tokenAuth());
-    
+    server.use(UserMiddleware.test());
+
     // Routes
     server.get("/", (req, res) -> {
       res.status(200).json(Map.of("message", "Hello World!"));
     });
 
+    // --------------------------------- Cats Routes ------------------
+    Router catsRouter = new Router();
 
-    server.get("/cats", UserMiddleware.tokenAuth(), (HttpHandler) (req, res) -> {
+    catsRouter.get("/", UserMiddleware.tokenAuth(), (HttpHandler) (req, res) -> {
       res.status(200).json(Map.of("data", db.getAll()));
     });
 
-    server.post("/cats", (req, res) -> {
+    server.use("/cats", catsRouter);
+
+    catsRouter.post("/", (req, res) -> {
       Map<String, Object> body = req.getBodyJson();
       int id = ((Number) body.get("id")).intValue();
       String name = (String) body.get("name");
@@ -38,7 +42,7 @@ public class Main {
           "name", name));
     });
 
-    server.get("/cats/:id", (req, res) -> {
+    catsRouter.get("/:id", (req, res) -> {
       try {
         int id = Integer.parseInt(req.getPathParams().get("id"));
         Object cat = db.get(id);
@@ -51,6 +55,8 @@ public class Main {
         res.status(400).json(Map.of("message", "Invalid cat ID"));
       }
     });
+
+    server.printRouteTree();
 
     server.run();
 

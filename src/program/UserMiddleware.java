@@ -6,6 +6,13 @@ import server.Middleware;
 
 public class UserMiddleware {
 
+  public static Middleware test() {
+    return (req, res, next) -> {
+      System.out.println("Global middleware used!");
+      next.next();
+    };
+  }
+
   public static Middleware tokenAuth() {
     return (req, res, next) -> {
       String token = req.getHeaders().get("Authorization");

@@ -5,26 +5,15 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class HttpServer {
+public class HttpServer extends Router {
 
   private int port;
   private boolean debug = true;
-  private Map<String, List<Route>> routes = new HashMap<>();
-  private List<GlobalMiddleware> globalMiddlewares = new ArrayList<>();
-
-  private static class GlobalMiddleware {
-    String pathPrefix;
-    Middleware handler;
-
-    GlobalMiddleware(String pathPrefix, Middleware handler) {
-      this.pathPrefix = pathPrefix;
-      this.handler = handler;
-    }
-  }
 
   public HttpServer(int port) {
     this.port = port;
@@ -55,75 +44,75 @@ public class HttpServer {
     System.out.println(res.serialize());
   }
 
-  public void run() {
-    try (ServerSocket server = new ServerSocket(port)) {
+  private Route findRoute(HttpRequest req) {
+    List<Route> methodRoutes = this.routes.get(req.getMethod());
+    if (methodRoutes == null)
+      return null;
 
-      System.out.println("🚀 Server is running on port " + port + " ...");
-
-      while (true) {
-        Socket client = server.accept();
-
-        try {
-          long startTime = System.currentTimeMillis();
-
-          // parse request
-          HttpRequestParser parser = new HttpRequestParser(client);
-          HttpRequest req = parser.parseRequest();
-          HttpResponse res = new HttpResponse();
-
-          logRequest(req);
-
-          // găsește ruta
-          Route matchedRoute = null;
-          Map<String, String> pathParams = null;
-          List<Route> methodRoutes = routes.get(req.getMethod());
-
-          if (methodRoutes != null) {
-            for (Route route : methodRoutes) {
-              Map<String, String> params = matchPathWithParams(route.path, req.getCleanPath());
-              if (params != null) {
-                matchedRoute = route;
-                pathParams = params;
-                break;
-              }
-            }
-          }
-
-          if (matchedRoute != null) {
-            req.setPathParams(pathParams);
-
-            // combină middleware-urile globale cu cele ale rutei
-            List<Middleware> effectiveMiddlewares = new ArrayList<>();
-            for (GlobalMiddleware gm : globalMiddlewares) {
-              if(gm.pathPrefix == null || req.getCleanPath().startsWith(gm.pathPrefix)) {
-                effectiveMiddlewares.add(gm.handler);
-              }
-            }
-            effectiveMiddlewares.addAll(matchedRoute.middlewares);
-            MiddlewareExecutor.execute(effectiveMiddlewares, matchedRoute.handler, req, res);
-
-          } else {
-            res.status(404).json(Map.of("message", "Route not found"));
-          }
-
-          long duration = System.currentTimeMillis() - startTime;
-          logResponse(req, res, duration);
-
-          PrintWriter out = new PrintWriter(client.getOutputStream());
-          out.write(res.serialize());
-          out.flush();
-
-        } catch (IllegalArgumentException e) {
-          sendError(client, 400, "Bad Request");
-        } catch (Exception e) {
-          sendError(client, 500, "Internal Server Error");
-        } finally {
-          client.close();
-        }
+    for (Route route : methodRoutes) {
+      // matchPathWithParams este tot din clasa părinte Router
+      Map<String, String> params = matchPathWithParams(route.path, req.getCleanPath());
+      if (params != null) {
+        req.setPathParams(params);
+        return route;
       }
+    }
+    return null;
+  }
 
+  public void run() {
+    try (ServerSocket serverSocket = new ServerSocket(port)) {
+      System.out.println("🚀 Server is running on port " + port + " ...");
+      while (true) {
+        Socket client = serverSocket.accept();
+        // TODO Multhi-Threading
+        handleClient(client);
+      }
     } catch (IOException e) {
       System.out.println("Failed to start server: " + e.getMessage());
+    }
+  }
+
+  private void handleClient(Socket client) {
+    try {
+      long startTime = System.currentTimeMillis();
+
+      HttpRequestParser parser = new HttpRequestParser(client);
+      HttpRequest req = parser.parseRequest();
+      HttpResponse res = new HttpResponse();
+
+      logRequest(req);
+
+      Route matchedRoute = findRoute(req);
+      if (matchedRoute != null) {
+        List<Middleware> effectiveMiddlewares = new ArrayList<>();
+        for (GlobalMiddleware gm : this.middlewares) {
+          if (gm.pathPrefix == null || req.getCleanPath().startsWith(gm.pathPrefix)) {
+            effectiveMiddlewares.add(gm.handler);
+          }
+        }
+        effectiveMiddlewares.addAll(matchedRoute.middlewares);
+
+        MiddlewareExecutor.execute(effectiveMiddlewares, matchedRoute.handler, req, res);
+
+      } else {
+        res.status(404).json(Map.of("message", "Route not found"));
+      }
+
+      long duration = System.currentTimeMillis() - startTime;
+      logResponse(req, res, duration);
+
+      PrintWriter out = new PrintWriter(client.getOutputStream());
+      out.write(res.serialize());
+      out.flush();
+
+    } catch (Exception e) {
+      sendError(client, 500, "Internal Server Error");
+    } finally {
+      try {
+        client.close();
+      } catch (IOException ignored) {
+      }
     }
   }
 
@@ -138,105 +127,49 @@ public class HttpServer {
     }
   }
 
-  // Server routing possible
-  private void addRoute(String method, String path, Object... handlers) {
+  public void printRouteTree() {
+    System.out.println("\n===== HTTP ROUTE TREE =====");
+    if (routes.isEmpty()) {
+      System.out.println("No routes registered.");
+      return;
+    }
 
-    List<Middleware> middlewares = new ArrayList<>();
-    for (int i = 0; i < handlers.length - 1; i++) {
-      if (!(handlers[i] instanceof Middleware)) {
-        throw new IllegalArgumentException("All handlers except last must be Middleware");
+    // Grupăm rutele după path pentru a le afișa frumos
+    Map<String, List<String>> tree = new HashMap<>();
+
+    routes.forEach((method, routeList) -> {
+      for (Route r : routeList) {
+        tree.computeIfAbsent(r.path, k -> new ArrayList<>()).add(method);
       }
-      middlewares.add((Middleware) handlers[i]);
-    }
+    });
 
-    Object last = handlers[handlers.length - 1];
-    if (!(last instanceof HttpHandler)) {
-      throw new IllegalArgumentException("Last argument must be HttpHandler");
-    }
-    HttpHandler handler = (HttpHandler) last;
+    // Sortăm path-urile alfabetic pentru o listă ordonată
+    List<String> sortedPaths = new ArrayList<>(tree.keySet());
+    Collections.sort(sortedPaths);
 
-    Route route = new Route(method, path, middlewares, handler);
-    routes.computeIfAbsent(method, k -> new ArrayList<>()).add(route);
-  }
+    for (String path : sortedPaths) {
+      List<String> methods = tree.get(path);
+      // Afișăm path-ul și metodele suportate (ex: /cats [GET, POST])
+      System.out.printf(" %-20s %s\n", path, methods.toString());
 
-  public void use(Middleware handler) {
-    globalMiddlewares.add(new GlobalMiddleware(null, handler));
-  }
-
-  public void use(String pathPrefix, Middleware handler) {
-    globalMiddlewares.add(new GlobalMiddleware(pathPrefix, handler));
-  }
-
-  private Map<String, String> matchPathWithParams(String routePath, String requestPath) {
-    String[] routeParts = routePath.split("/");
-    String[] reqParts = requestPath.split("/");
-
-    if (routeParts.length != reqParts.length)
-      return null;
-
-    Map<String, String> params = new HashMap<>();
-    for (int i = 0; i < routeParts.length; i++) {
-      if (routeParts[i].startsWith(":")) {
-        params.put(routeParts[i].substring(1), reqParts[i]);
-      } else if (!routeParts[i].equals(reqParts[i])) {
-        return null;
+      // Dacă vrei să vezi și câte middleware-uri are fiecare
+      for (Route r : getRoutesForPath(path)) {
+        System.out.println("    └── " + r.method + ": " + r.middlewares.size() + " middlewares");
       }
     }
-    return params;
+    System.out.println("===========================\n");
   }
 
-  // GET
-  public void get(String path, Object... handlers) {
-    addRoute("GET", path, handlers);
-  }
-
-  public void get(String path, HttpHandler handler) {
-    addRoute("GET", path, handler);
-  }
-
-  // POST
-  public void post(String path, Object... handlers) {
-    addRoute("POST", path, handlers);
-  }
-
-  public void post(String path, HttpHandler handler) {
-    addRoute("POST", path, handler);
-  }
-
-  // PUT
-  public void put(String path, Object... handlers) {
-    addRoute("PUT", path, handlers);
-  }
-
-  public void put(String path, HttpHandler handler) {
-    addRoute("PUT", path, handler);
-  }
-
-  // PATCH
-  public void patch(String path, Object... handlers) {
-    addRoute("PATCH", path, handlers);
-  }
-
-  public void patch(String path, HttpHandler handler) {
-    addRoute("PATCH", path, handler);
-  }
-
-  // DELETE
-  public void delete(String path, Object... handlers) {
-    addRoute("DELETE", path, handlers);
-  }
-
-  public void delete(String path, HttpHandler handler) {
-    addRoute("DELETE", path, handler);
-  }
-
-  // OPTIONS
-  public void options(String path, Object... handlers) {
-    addRoute("OPTIONS", path, handlers);
-  }
-
-  public void options(String path, HttpHandler handler) {
-    addRoute("OPTIONS", path, handler);
+  // Helper pentru a lua toate obiectele Route pentru un anumit path
+  private List<Route> getRoutesForPath(String path) {
+    List<Route> found = new ArrayList<>();
+    routes.values().forEach(list -> {
+      for (Route r : list) {
+        if (r.path.equals(path))
+          found.add(r);
+      }
+    });
+    return found;
   }
 
 }
