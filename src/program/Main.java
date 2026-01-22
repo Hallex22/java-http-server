@@ -4,6 +4,7 @@ import java.util.Map;
 
 import server.HttpHandler;
 import server.HttpServer;
+import server.JsonParser;
 import server.Router;
 import fakeDB.CatsDB;
 
@@ -14,6 +15,7 @@ public class Main {
     HttpServer server = new HttpServer(true);
     CatsDB db = new CatsDB("fakeDB/cats.json");
 
+    server.use(new JsonParser());
     server.use(UserMiddleware.test());
 
     // Routes
@@ -29,15 +31,16 @@ public class Main {
     });
 
     catsRouter.post("/", (req, res) -> {
-      Map<String, Object> body = req.getBodyJson();
-      int id = ((Number) body.get("id")).intValue();
-      String name = (String) body.get("name");
-
-      System.out.println("Req query params:" + req.getQueryParams());
-
-      res.status(201).json(Map.of(
-          "message", "Cat added",
-          "name", name));
+      try {
+        Map<String, Object> body = req.getParsedBody();
+        int id = req.getIntFromBody("id");
+        String name = (String) body.get("name");
+        res.status(201).json(Map.of(
+            "message", "Cat added",
+            "name", name));
+      } catch (Exception e) {
+        res.status(400).json(Map.of("message", "Invalid body"));
+      }
     });
 
     catsRouter.get("/:id", (req, res) -> {
@@ -56,10 +59,8 @@ public class Main {
 
     server.use("/cats", catsRouter);
 
-
     // Static files (frontend server)
     server.staticFiles("/public", "public");
-
 
     server.listen(8888, "localhost", () -> {
       System.out.println("🚀 Server running on http://" + server.host + ":" +

@@ -27,6 +27,7 @@ public class HttpServer extends Router {
   private ServerSocket serverSocket = null;
   private final ExecutorService threadPool = Executors.newFixedThreadPool(10);
   private boolean debug = false;
+  private Map<String, String> staticRoutes = new HashMap<>();
 
   public HttpServer(boolean debug) {
     this.debug = debug;
@@ -105,6 +106,11 @@ public class HttpServer extends Router {
     } catch (InterruptedException e) {
       System.err.println("Error while stopping the threadPool: " + e.getMessage());
     }
+  }
+
+  public void staticFiles(String webPath, String localPath) {
+    String formatedPath = webPath.startsWith("/") ? webPath : "/" + webPath;
+    staticRoutes.put(formatedPath, localPath);
   }
 
   public void printRouteTree() {
@@ -279,7 +285,6 @@ public class HttpServer extends Router {
     }
   }
 
-  // Helper pentru a lua toate obiectele Route pentru un anumit path
   private List<Route> getRoutesForPath(String path) {
     List<Route> found = new ArrayList<>();
     routes.values().forEach(list -> {

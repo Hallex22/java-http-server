@@ -9,7 +9,6 @@ public class Router {
 
   protected Map<String, List<Route>> routes = new HashMap<>();
   protected List<GlobalMiddleware> middlewares = new ArrayList<>();
-  protected Map<String, String> staticRoutes = new HashMap<>();
 
   static class GlobalMiddleware {
     String pathPrefix;
@@ -141,12 +140,6 @@ public class Router {
         this.addRoute(method, combinedPath, allHandlers.toArray());
       }
     });
-  }
-
-
-  public void staticFiles(String webPath, String localPath) {
-    String formatedPath = webPath.startsWith("/") ? webPath : "/" + webPath;
-    staticRoutes.put(formatedPath, localPath);
   }
 
 }

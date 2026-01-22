@@ -1,4 +1,5 @@
 package server;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -11,6 +12,7 @@ public class HttpRequest {
   private String version;
   private Map<String, String> headers = new HashMap<>();
   private String body;
+  private Map<String, Object> parsedBody;
   private Map<String, String> queryParams;
   private Map<String, String> pathParams;
 
@@ -56,6 +58,10 @@ public class HttpRequest {
     return headers;
   }
 
+  public String getHeader(String key) {
+    return headers.get(key);
+  }
+
   public void setHeaders(Map<String, String> headers) {
     this.headers = headers;
   }
@@ -76,6 +82,21 @@ public class HttpRequest {
     this.body = body;
   }
 
+  public Map<String, Object> getParsedBody() {
+    return this.parsedBody;
+  }
+
+  public int getIntFromBody(String key) {
+    Object val = parsedBody.get(key);
+    if (val instanceof Number) return ((Number) val).intValue();
+    if (val instanceof String) return Integer.parseInt((String) val);
+    return 0;
+  }
+
+  public void setParsedBody(Map<String, Object> parsedBody) {
+    this.parsedBody = parsedBody;
+  }
+
   public void setPathParams(Map<String, String> pathParams) {
     this.pathParams = pathParams;
   }
@@ -84,14 +105,14 @@ public class HttpRequest {
     return pathParams != null ? pathParams : new HashMap<>();
   }
 
-  public Map<String, Object> getBodyJson() throws IllegalStateException {
-    String contentType = headers.get("Content-Type");
-    if (contentType == null || !contentType.contains("application/json")) {
-      throw new IllegalStateException("Request is not JSON");
-    }
-    Gson gson = new Gson();
-    return gson.fromJson(this.body, Map.class);
-  }
+  // public Map<String, Object> getBodyJson() throws IllegalStateException {
+  //   String contentType = headers.get("Content-Type");
+  //   if (contentType == null || !contentType.contains("application/json")) {
+  //     throw new IllegalStateException("Request is not JSON");
+  //   }
+  //   Gson gson = new Gson();
+  //   return gson.fromJson(this.body, Map.class);
+  // }
 
   public Map<String, String> getQueryParams() {
     if (queryParams != null)
