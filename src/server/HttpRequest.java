@@ -3,8 +3,6 @@ package server;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.google.gson.Gson;
-
 public class HttpRequest {
 
   private String method;
@@ -105,6 +103,11 @@ public class HttpRequest {
     return pathParams != null ? pathParams : new HashMap<>();
   }
 
+  public String getPathParam(String key) {
+    return pathParams != null ? pathParams.get(key) : null;
+  }
+
+
   // public Map<String, Object> getBodyJson() throws IllegalStateException {
   //   String contentType = headers.get("Content-Type");
   //   if (contentType == null || !contentType.contains("application/json")) {
@@ -135,6 +138,11 @@ public class HttpRequest {
     }
 
     return queryParams;
+  }
+
+  public String getQueryParam(String key) {
+    Map<String, String> queryParams = this.getQueryParams();
+    return queryParams != null ? queryParams.get(key) : null;
   }
 
   public String serialize() {
