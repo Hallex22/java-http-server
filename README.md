@@ -35,7 +35,7 @@ cd java-http-server
 HttpServer server = new HttpServer();
 
 server.use(new JsonParser());
-server.use(AuthMiddleware.token());
+server.use(AuthMiddleware.tokenAuth());
 
 server.get("/", (req, res) -> {
   res.status(200).json(Map.of("message", "Hello World!"));
@@ -48,8 +48,7 @@ server.listen(8888, "localhost", () -> {
 ```
 
 ## 🧩 Routing
-
-Basic routes
+### Basic routes
 ```java
 Router catsRouter = new Router();
 
@@ -61,5 +60,85 @@ catsRouter.delete("/:id", CatsController.deleteCat());
 server.use("/cats", catsRouter);
 ```
 
+### Path Params
+```java
+catsRouter.get("/:id", (req, res) -> {
+  try {
+    // path params example: /cats/1
+    int id = Integer.parseInt(req.getPathParam("id"));
+    Cat cat = CatsRepository.findOne(id);
+    if (cat != null) {
+      res.status(200).json(cat);
+    } else {
+      res.status(404).json(Map.of("message", "Cat not found"));
+    }
+  } catch (Exception e) {
+    res.status(400).json(Map.of("message", "Invalid cat ID"));
+  }
+});
+```
+
+### Query Params
+```java
+catsRouter.get("/", (req, res) -> {
+  try {
+    // query params example: /cats?age=3&color=black
+    String age = req.getQueryParam("age");
+    String color = req.getQueryParam("color");
+
+    List<Cat> cats = CatsRepository.findAll(age, color);
+    res.status(200).json(Map.of(
+      "count", cats.size(),
+      "data", cats
+    ));
+
+  } catch (Exception e) {
+    res.status(400).json(Map.of("message", "Invalid request"));
+  }
+})
+```
+
+## 🔁 Middleware System (Express-style)
+### Global middleware
+```java
+server.use((req, res, next) -> {
+    System.out.println(req.getMethod() + " " + req.getPath());
+    next.run();
+});
+```
+
+### Route-level middleware
+```java
+catsRouter.get("/", AuthMiddleware.tokenAuth(), (req, res) -> {
+  res.status(200).json(CatsRepository.findAll());
+});
+```
+
+### Middleware behavior
+- Middleware controls flow via `next.run()`
+- If `next()` is NOT called, execution stops
+- Perfect for auth, validation, logging, etc.
+
+### Example auth middleware
+```java
+public class AuthMiddleware {
+
+  public static Middleware tokenAuth() {
+    return (req, res, next) -> {
+      String token = req.getHeader("Authorization");
+      if (!"TOP_SECRET".equals(token)) {
+        res.status(401).json(Map.of("message", "Unauthorized"));
+        return;
+      }
+      next.run();
+    };
+  }
+
+}
+```
+
+
+## 🧠 Body Parsing (Universal)
+Implemented via middleware, not hardcoded into the server.
 
 
